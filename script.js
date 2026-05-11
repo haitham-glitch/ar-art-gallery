@@ -1,54 +1,17 @@
-/* =====================================================
-   AR-Art-Gallery — Prototype script
-   ─────────────────────────────────────────────────────
-   All persistence currently uses localStorage + base64
-   data URLs so the app works without any backend.
-   
-   Replace the marked sections with the Firebase SDK
-   when wiring up production:
-   
-     • fetchPaintings   →  Firestore  getDocs(...)
-     • uploadPainting   →  Storage    uploadBytes(...) + Firestore addDoc(...)
-     • deletePainting   →  Firestore  deleteDoc(...)  + Storage deleteObject(...)
-   
-   Look for the 🔥 FIREBASE markers throughout this file.
-===================================================== */
+// استدعاء مكتبة Supabase عن طريق CDN
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm'
 
+// إعدادات الربط - استبدل KEY_HERE بمفتاح الـ anon/publishable الذي نسخته
+const SUPABASE_URL = 'https://wfqcygkgshoyvdgsbnqr.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_C8ClLruKmK3e7iKVdXrCyg_qK-zdW4D'; 
 
-/* -----------------------------------------------------
-   CONFIG
------------------------------------------------------ */
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const STORAGE_KEY = 'aether_gallery_v1';
 
 // 🔥 FIREBASE: replace with auth.currentUser.displayName once auth is live
-const SELLER_NAME = 'Elena Marchetti';
+const SELLER_NAME = 'AR Art Gallery';
 
-// Demo entries shown on first load so the gallery isn't empty.
-// In production these will live in Firestore.
-const DEMO_PAINTINGS = [
-  {
-    id: 'demo_astronaut',
-    name: 'Suspended Astronaut',
-    modelUrl: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
-    uploadedAt: Date.now() - 86400000 * 3,
-    isDemo: true
-  },
-  {
-    id: 'demo_neilarmstrong',
-    name: 'Lunar Footprint',
-    modelUrl: 'https://modelviewer.dev/shared-assets/models/NeilArmstrong.glb',
-    uploadedAt: Date.now() - 86400000 * 2,
-    isDemo: true
-  },
-  {
-    id: 'demo_robot',
-    name: 'Expressive Form',
-    modelUrl: 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb',
-    uploadedAt: Date.now() - 86400000,
-    isDemo: true
-  }
-];
+
 
 
 /* =====================================================
@@ -63,28 +26,16 @@ const DEMO_PAINTINGS = [
  * @returns {Promise<Array<{id, name, modelUrl, uploadedAt, isDemo?}>>}
  */
 async function fetchPaintings() {
-  // 🔥 FIREBASE — replace the whole block below with:
-  //
-  //   import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-  //   const q = query(collection(db, 'paintings'), orderBy('uploadedAt', 'desc'));
-  //   const snap = await getDocs(q);
-  //   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const { data, error } = await supabase
+    .from('paintings')
+    .select('*')
+    .order('uploadedAt', { ascending: false });
 
-  await simulateLatency(200);
-
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    // first run — seed with demos
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_PAINTINGS));
-    return [...DEMO_PAINTINGS];
-  }
-
-  try {
-    const list = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
-  } catch {
+  if (error) {
+    console.error("Error fetching:", error);
     return [];
   }
+  return data;
 }
 
 /**
@@ -94,48 +45,35 @@ async function fetchPaintings() {
  * @returns {Promise<{id, name, modelUrl, uploadedAt}>}
  */
 async function uploadPainting(file, name) {
-  // 🔥 FIREBASE — replace the whole block below with:
-  //
-  //   import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-  //   import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
-  //
-  //   const storageRef = ref(storage, `paintings/${crypto.randomUUID()}.glb`);
-  //   const snap       = await uploadBytes(storageRef, file);
-  //   const modelUrl   = await getDownloadURL(snap.ref);
-  //
-  //   const docRef = await addDoc(collection(db, 'paintings'), {
-  //     name,
-  //     modelUrl,
-  //     storagePath: snap.ref.fullPath,
-  //     sellerId:    auth.currentUser.uid,
-  //     uploadedAt:  serverTimestamp()
-  //   });
-  //
-  //   return { id: docRef.id, name, modelUrl, uploadedAt: Date.now() };
+  const fileName = `${Date.now()}_${file.name}`;
+  
+  // 1. رفع الملف إلى الـ Bucket اللي سميناه paintings
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from('paintings')
+    .upload(fileName, file);
 
-  await simulateLatency(400);
+  if (uploadError) throw uploadError;
 
-  const modelUrl = await fileToDataUrl(file);
+  // 2. الحصول على الرابط العام للملف
+  const { data: urlData } = supabase.storage
+    .from('paintings')
+    .getPublicUrl(fileName);
 
-  const painting = {
-    id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
-    name,
-    modelUrl,
-    uploadedAt: Date.now(),
-    isDemo: false
-  };
+  const modelUrl = urlData.publicUrl;
 
-  const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  current.unshift(painting);
+  // 3. حفظ البيانات في جدول الـ Database
+  const { data: dbData, error: dbError } = await supabase
+    .from('paintings')
+    .insert([{
+      name: name,
+      modelUrl: modelUrl,
+      storagePath: fileName,
+      uploadedAt: Date.now()
+    }])
+    .select();
 
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-  } catch (err) {
-    // localStorage quota is small (~5 MB). Firebase Storage has no such limit.
-    throw new Error('QUOTA_EXCEEDED');
-  }
-
-  return painting;
+  if (dbError) throw dbError;
+  return dbData[0];
 }
 
 /**
@@ -143,21 +81,15 @@ async function uploadPainting(file, name) {
  * @param {string} id
  */
 async function deletePainting(id) {
-  // 🔥 FIREBASE — replace the whole block below with:
-  //
-  //   import { doc, deleteDoc, getDoc } from 'firebase/firestore';
-  //   import { ref, deleteObject } from 'firebase/storage';
-  //
-  //   const snap = await getDoc(doc(db, 'paintings', id));
-  //   const data = snap.data();
-  //   await deleteDoc(doc(db, 'paintings', id));
-  //   if (data?.storagePath) await deleteObject(ref(storage, data.storagePath));
+  // جلب مسار الملف أولاً لحذفه من التخزين
+  const { data: item } = await supabase.from('paintings').select('storagePath').eq('id', id).single();
+  
+  if (item?.storagePath) {
+    await supabase.storage.from('paintings').remove([item.storagePath]);
+  }
 
-  await simulateLatency(150);
-
-  const current = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  const updated = current.filter(p => p.id !== id);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  // حذف السجل من قاعدة البيانات
+  await supabase.from('paintings').delete().eq('id', id);
 }
 
 
