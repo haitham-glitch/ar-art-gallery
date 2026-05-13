@@ -614,3 +614,180 @@ main {
 @media (min-width: 760px) and (max-width: 1100px) {
   .gallery-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* =====================================================
+   AUTH & NAV — additions (do not modify above)
+===================================================== */
+
+.brand-link { text-decoration: none; color: inherit; }
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+}
+
+.nav-link {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  letter-spacing: -0.005em;
+  transition: color 0.2s ease;
+}
+.nav-link:hover { color: var(--accent); }
+
+.nav-greeting {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--ink-soft);
+  font-variation-settings: 'opsz' 144;
+}
+
+.nav-btn {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.nav-btn:hover { border-color: var(--ink); color: var(--ink); }
+
+/* ---- Auth card ---- */
+.auth-section { max-width: 560px; margin: 0 auto; }
+
+.auth-card {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth-tab {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: var(--ink-muted);
+  background: transparent;
+  border: none;
+  padding: var(--s-4);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.auth-tab:hover { color: var(--ink-soft); }
+.auth-tab.active {
+  color: var(--ink);
+  background: var(--bg-elevated);
+}
+.auth-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+.auth-panel { display: none; }
+.auth-panel.active { display: block; }
+
+/* auth-specific form override (transparent inside card) */
+.auth-form {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: var(--s-6);
+  max-width: none;
+}
+
+/* reuse text-input styling for email/password */
+.field input[type="email"],
+.field input[type="password"] {
+  font-family: var(--font-body);
+  font-size: 16px;
+  padding: var(--s-3) 0;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s ease;
+  width: 100%;
+}
+.field input[type="email"]::placeholder,
+.field input[type="password"]::placeholder { color: var(--ink-faint); }
+.field input[type="email"]:focus,
+.field input[type="password"]:focus { border-bottom-color: var(--accent); }
+
+/* ---- Role radios as cards ---- */
+.role-fieldset { border: none; padding: 0; margin: 0; }
+.role-fieldset .field-label { display: block; margin-bottom: var(--s-3); }
+
+.role-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+}
+
+.role-option { cursor: pointer; position: relative; }
+.role-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.role-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  transition: all 0.2s ease;
+  height: 100%;
+}
+.role-option:hover .role-card { border-color: var(--ink-muted); }
+.role-option input[type="radio"]:checked ~ .role-card {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.role-option input[type="radio"]:focus-visible ~ .role-card {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.role-icon { font-size: 18px; color: var(--accent); margin-bottom: 2px; }
+.role-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  font-variation-settings: 'opsz' 144;
+}
+.role-desc {
+  font-size: 12px;
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 540px) {
+  .role-options { grid-template-columns: 1fr; }
+}

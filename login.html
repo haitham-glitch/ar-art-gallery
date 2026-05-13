@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in · AR-Art-Gallery</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a href="index.html" class="brand brand-link">
+      <div class="brand-mark" aria-hidden="true">◈</div>
+      <div class="brand-text">
+        <h1 class="brand-name">AR-Art-Gallery</h1>
+        <p class="brand-tagline">Augmented Reality Art Gallery</p>
+      </div>
+    </a>
+    <nav class="site-nav">
+      <a href="index.html" class="nav-link">View gallery →</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="auth-section">
+      <div class="section-header">
+        <p class="section-eyebrow">Access</p>
+        <h2 class="section-title">Enter the <em>gallery</em></h2>
+        <p class="section-description">
+          Sign in to your account, or create one as a <em>seller</em> to submit your own works.
+        </p>
+      </div>
+
+      <div class="auth-card">
+        <div class="auth-tabs" role="tablist">
+          <button class="auth-tab active" data-tab="login" type="button" role="tab">Sign in</button>
+          <button class="auth-tab" data-tab="signup" type="button" role="tab">Create account</button>
+        </div>
+
+        <!-- LOGIN PANEL -->
+        <div class="auth-panel active" data-panel="login">
+          <form id="loginForm" class="upload-form auth-form" autocomplete="on">
+            <label class="field">
+              <span class="field-label">Email</span>
+              <input type="email" id="loginEmail" placeholder="you@gallery.art" required autocomplete="email" />
+            </label>
+            <label class="field">
+              <span class="field-label">Password</span>
+              <input type="password" id="loginPassword" placeholder="••••••••" minlength="6" required autocomplete="current-password" />
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="submit-btn" id="loginBtn">
+                <span class="btn-label">Sign in</span>
+                <span class="btn-arrow" aria-hidden="true">→</span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- SIGNUP PANEL -->
+        <div class="auth-panel" data-panel="signup">
+          <form id="signupForm" class="upload-form auth-form" autocomplete="on">
+            <label class="field">
+              <span class="field-label">Display name</span>
+              <input type="text" id="signupName" placeholder="Elena Marchetti" maxlength="60" required />
+            </label>
+            <label class="field">
+              <span class="field-label">Email</span>
+              <input type="email" id="signupEmail" placeholder="you@gallery.art" required autocomplete="email" />
+            </label>
+            <label class="field">
+              <span class="field-label">Password</span>
+              <input type="password" id="signupPassword" placeholder="At least 6 characters" minlength="6" required autocomplete="new-password" />
+            </label>
+
+            <fieldset class="role-fieldset">
+              <legend class="field-label">Account type</legend>
+              <div class="role-options">
+                <label class="role-option">
+                  <input type="radio" name="role" value="customer" checked />
+                  <div class="role-card">
+                    <span class="role-icon" aria-hidden="true">◇</span>
+                    <span class="role-title">Customer</span>
+                    <span class="role-desc">Browse and place works in your space.</span>
+                  </div>
+                </label>
+                <label class="role-option">
+                  <input type="radio" name="role" value="seller" />
+                  <div class="role-card">
+                    <span class="role-icon" aria-hidden="true">◈</span>
+                    <span class="role-title">Seller</span>
+                    <span class="role-desc">Upload and manage your own collection.</span>
+                  </div>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="form-actions">
+              <button type="submit" class="submit-btn" id="signupBtn">
+                <span class="btn-label">Create account</span>
+                <span class="btn-arrow" aria-hidden="true">→</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>AR-Art-Gallery · Authentication powered by Supabase.</p>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>
