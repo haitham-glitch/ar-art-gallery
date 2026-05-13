@@ -20,6 +20,8 @@ const els = {
   empty:       document.getElementById('emptyState'),
   toast:       document.getElementById('toast'),
   logoutBtn:   document.getElementById('logoutBtn'),
+  variantsInput:document.getElementById('paintingVariants'),
+  allowCustomCheckbox: document.getElementById('paintingAllowCustom'),
 };
 
 els.sellerName.textContent = currentProfile.display_name || currentUser.email;
@@ -47,8 +49,7 @@ async function fetchMyPaintings() {
   return data;
 }
 
-async function uploadPainting(file, name) {
-  // store in a {userId}/ folder so storage RLS can scope deletes
+async function uploadPainting(file, name, variants, allowCustom) {
   const storagePath = `${currentUser.id}/${Date.now()}_${file.name}`;
 
   const { error: uploadError } = await supabase.storage
@@ -64,10 +65,12 @@ async function uploadPainting(file, name) {
     .from('paintings')
     .insert([{
       name,
-      modelUrl:    urlData.publicUrl,
-      storagePath: storagePath,
-      uploadedAt:  Date.now(),
-      seller_id:   currentUser.id   // ← attaches the logged-in seller
+      modelUrl:     urlData.publicUrl,
+      storagePath:  storagePath,
+      uploadedAt:   Date.now(),
+      seller_id:    currentUser.id,
+      variants:     variants,        // ← new
+      allow_custom: allowCustom      // ← new
     }])
     .select()
     .single();
@@ -142,17 +145,22 @@ els.fileInput.addEventListener('change', () => {
 
 els.form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const name = els.nameInput.value.trim();
-  const file = els.fileInput.files[0];
+  const name        = els.nameInput.value.trim();
+  const file        = els.fileInput.files[0];
+  const variants    = els.variantsInput.value.trim() || null;
+  const allowCustom = els.allowCustomCheckbox.checked;
+
   if (!name || !file) return;
   if (!file.name.toLowerCase().endsWith('.glb')) {
-    showToast('Only .glb files are supported.'); return;
+    showToast('Only .glb files are supported.');
+    return;
   }
 
   setSubmitting(true);
   try {
-    await uploadPainting(file, name);
+    await uploadPainting(file, name, variants, allowCustom);
     els.form.reset();
+    els.allowCustomCheckbox.checked = false;
     els.fileName.textContent = 'Drop a .glb file here, or click to browse';
     els.fileDisplay.classList.remove('has-file');
     showToast(`"${name}" added to the collection.`);

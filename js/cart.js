@@ -4,10 +4,26 @@ const STORAGE_KEY = 'ar_gallery_cart';
 let items = load();
 const listeners = new Set();
 
+function newLineId() {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function normalize(raw) {
+  return {
+    lineId:     raw.lineId     || newLineId(),
+    id:         raw.id,
+    name:       raw.name,
+    price:      raw.price,
+    variant:    raw.variant    || null,
+    customNote: raw.customNote || ''
+  };
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const arr = raw ? JSON.parse(raw) : [];
+    return arr.map(normalize);
   } catch {
     return [];
   }
@@ -39,19 +55,41 @@ export function getState() {
 
 export function subscribe(fn) {
   listeners.add(fn);
-  fn(getState());            // emit current state immediately
+  fn(getState());
   return () => listeners.delete(fn);
 }
 
+/**
+ * Add an item.
+ *   item = { id, name, price, variant?, customNote? }
+ * Same painting with a different variant or note creates a new line.
+ * Exact duplicates (same id + variant + note) are ignored.
+ */
 export function add(item) {
-  if (items.some(i => i.id === item.id)) return false;   // no duplicates
-  items.push({ id: item.id, name: item.name, price: item.price });
+  const variant    = item.variant    || null;
+  const customNote = item.customNote || '';
+
+  const duplicate = items.some(i =>
+    i.id === item.id &&
+    (i.variant || null) === variant &&
+    (i.customNote || '') === customNote
+  );
+  if (duplicate) return false;
+
+  items.push({
+    lineId: newLineId(),
+    id:     item.id,
+    name:   item.name,
+    price:  item.price,
+    variant,
+    customNote
+  });
   persist();
   return true;
 }
 
-export function remove(id) {
-  items = items.filter(i => i.id !== id);
+export function remove(lineId) {
+  items = items.filter(i => i.lineId !== lineId);
   persist();
 }
 
@@ -60,18 +98,16 @@ export function clear() {
   persist();
 }
 
-export function has(id) {
-  return items.some(i => i.id === id);
+/** True if the given painting appears in the cart in any form */
+export function has(paintingId) {
+  return items.some(i => i.id === paintingId);
 }
 
 export function formatPrice(amount) {
   return `$${amount.toLocaleString('en-US')}`;
 }
 
-/**
- * Deterministic pseudo-random price per painting id.
- * Same painting always shows the same price. Range: $400 – $1500 (step $50).
- */
+/** Stable pseudo-random price per painting id ($400–$1500, step $50) */
 export function priceFor(id) {
   const str = String(id);
   let hash = 0;
@@ -79,6 +115,6 @@ export function priceFor(id) {
     hash = ((hash << 5) - hash) + str.charCodeAt(i);
     hash |= 0;
   }
-  const steps = Math.abs(hash) % 23;       // 0..22
-  return 400 + steps * 50;                  // $400..$1500
+  const steps = Math.abs(hash) % 23;
+  return 400 + steps * 50;
 }

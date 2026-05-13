@@ -1277,3 +1277,293 @@ body.no-scroll { overflow: hidden; }
 [hidden] {
   display: none !important;
 }
+
+/* =====================================================
+   PHASE 3 — PRODUCT MODAL · VARIANTS · CHECKBOX
+===================================================== */
+
+/* ---------- Checkbox field (dashboard form) ---------- */
+.checkbox-field {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-start;
+  cursor: pointer;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.checkbox-field:hover { border-color: var(--ink-muted); }
+
+.checkbox-field:has(input[type="checkbox"]:checked) {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.checkbox-field input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.checkbox-mark {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  position: relative;
+  transition: all 0.2s ease;
+  margin-top: 1px;
+}
+
+.checkbox-field input[type="checkbox"]:checked ~ .checkbox-mark {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.checkbox-field input[type="checkbox"]:checked ~ .checkbox-mark::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 6px;
+  height: 11px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.checkbox-field input[type="checkbox"]:focus-visible ~ .checkbox-mark {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.checkbox-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.checkbox-title {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.checkbox-desc {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+
+/* ---------- Cart item: variant + custom note lines ---------- */
+.cart-item-variant {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+.cart-item-note {
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-style: italic;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+/* =====================================================
+   PRODUCT MODAL
+===================================================== */
+.product-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.product-modal.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.product-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(26, 22, 20, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.product-dialog {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  width: min(900px, 100%);
+  max-height: 90vh;
+  overflow: hidden;
+  transform: translateY(24px);
+  transition: transform 0.4s cubic-bezier(.22,.9,.3,1);
+  box-shadow: 0 30px 80px -20px rgba(26, 22, 20, 0.35);
+}
+
+.product-modal.open .product-dialog { transform: translateY(0); }
+
+.product-close {
+  position: absolute;
+  top: var(--s-4);
+  right: var(--s-4);
+  z-index: 3;
+  background: var(--bg-elevated);
+}
+
+.product-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-height: 90vh;
+}
+
+.product-viewer {
+  background: linear-gradient(180deg, var(--bg-viewer) 0%, var(--bg-paper) 100%);
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  min-height: 480px;
+}
+
+.product-viewer model-viewer {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  --poster-color: transparent;
+}
+
+.product-info {
+  padding: var(--s-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  overflow-y: auto;
+  max-height: 90vh;
+}
+
+.product-title {
+  font-family: var(--font-display);
+  font-size: clamp(26px, 3.4vw, 34px);
+  font-weight: 400;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  font-variation-settings: 'opsz' 144;
+  margin-top: var(--s-2);
+}
+
+.product-price {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--accent);
+  font-weight: 500;
+  font-variation-settings: 'opsz' 144;
+  letter-spacing: -0.02em;
+}
+
+.product-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Variant pills */
+.variant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.variant-pill {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 9px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.variant-pill:hover { border-color: var(--ink); }
+
+.variant-pill.selected {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+/* Custom-request textarea */
+.product-section textarea {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s ease;
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+.product-section textarea::placeholder { color: var(--ink-faint); }
+.product-section textarea:focus { border-color: var(--accent); }
+
+.product-actions {
+  margin-top: auto;
+  padding-top: var(--s-4);
+}
+
+.product-add {
+  width: 100%;
+  justify-content: center;
+}
+
+@media (max-width: 760px) {
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
+  .product-viewer {
+    aspect-ratio: 1 / 1;
+    min-height: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .product-info {
+    padding: var(--s-5) var(--s-4) var(--s-6);
+    max-height: none;
+  }
+}

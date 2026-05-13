@@ -94,6 +94,56 @@
   </footer>
 </aside>
 
+<!-- ============== PRODUCT DETAILS MODAL ============== -->
+<div class="product-modal" id="productModal" aria-hidden="true">
+  <div class="product-overlay" id="productOverlay"></div>
+  <div class="product-dialog" role="dialog" aria-labelledby="product-title">
+    <button class="icon-btn product-close" id="productClose" type="button" aria-label="Close">×</button>
+
+    <div class="product-grid">
+      <div class="product-viewer">
+        <model-viewer id="productViewer"
+          ar ar-modes="webxr scene-viewer quick-look"
+          camera-controls auto-rotate
+          shadow-intensity="1.2" exposure="1.05"
+          environment-image="neutral" ar-scale="auto">
+          <button slot="ar-button" class="ar-launch" type="button">
+            <span>View in your space</span>
+            <span class="ar-glyph">↗</span>
+          </button>
+        </model-viewer>
+      </div>
+
+      <div class="product-info">
+        <p class="section-eyebrow">Detail</p>
+        <h2 class="product-title" id="product-title"></h2>
+        <p class="product-price" id="productPrice"></p>
+
+        <div class="product-section" id="productVariantsSection" hidden>
+          <span class="field-label">Variant</span>
+          <div class="variant-options" id="productVariants" role="radiogroup"></div>
+        </div>
+
+        <div class="product-section" id="productCustomSection" hidden>
+          <label class="field">
+            <span class="field-label">Any specific requests?</span>
+            <textarea id="productCustom" rows="3"
+                      placeholder="e.g. Custom dimensions, color adjustments, framing preferences..."></textarea>
+          </label>
+        </div>
+
+        <div class="product-actions">
+          <button class="submit-btn product-add" id="productAdd" type="button">
+            <span class="btn-label">Add to cart</span>
+            <span class="btn-arrow" aria-hidden="true">→</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
 <!-- ============== CHECKOUT MODAL ============== -->
 <div class="checkout-modal" id="checkoutModal" aria-hidden="true">
   <div class="checkout-overlay" id="checkoutOverlay"></div>

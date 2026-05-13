@@ -32,12 +32,23 @@ const els = {
   checkoutTotal:   document.getElementById('checkoutTotal'),
   stateForm:       document.querySelector('[data-state="form"]'),
   stateSuccess:    document.querySelector('[data-state="success"]'),
-
-  // Fields
   fldName:    document.getElementById('fldName'),
   fldCard:    document.getElementById('fldCard'),
   fldExpiry:  document.getElementById('fldExpiry'),
   fldCvv:     document.getElementById('fldCvv'),
+
+  // Product modal
+  productModal:    document.getElementById('productModal'),
+  productOverlay:  document.getElementById('productOverlay'),
+  productClose:    document.getElementById('productClose'),
+  productViewer:   document.getElementById('productViewer'),
+  productTitle:    document.getElementById('product-title'),
+  productPrice:    document.getElementById('productPrice'),
+  productVariantsSection: document.getElementById('productVariantsSection'),
+  productVariants: document.getElementById('productVariants'),
+  productCustomSection:   document.getElementById('productCustomSection'),
+  productCustom:   document.getElementById('productCustom'),
+  productAdd:      document.getElementById('productAdd'),
 };
 
 /* ---------- Helpers ---------- */
@@ -45,6 +56,16 @@ const escapeHtml = s => String(s).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const formatDate = ts => new Date(ts).toLocaleDateString('en-US',
   { month:'short', day:'numeric', year:'numeric' });
+
+function anyOverlayOpen() {
+  return els.cartDrawer.classList.contains('open')
+      || els.checkoutModal.classList.contains('open')
+      || els.productModal.classList.contains('open');
+}
+
+function maybeUnlockScroll() {
+  if (!anyOverlayOpen()) document.body.classList.remove('no-scroll');
+}
 
 /* =====================================================
    NAV
@@ -73,6 +94,8 @@ async function renderNav() {
 /* =====================================================
    GALLERY
 ===================================================== */
+let allPaintings = [];
+
 async function fetchPaintings() {
   const { data, error } = await supabase
     .from('paintings')
@@ -82,11 +105,15 @@ async function fetchPaintings() {
   return data;
 }
 
+function findPainting(id) {
+  return allPaintings.find(p => String(p.id) === String(id));
+}
+
 function cardTemplate(p) {
   const price = cart.priceFor(p.id);
   const inCart = cart.has(p.id);
   return `
-    <article class="painting-card" data-id="${p.id}" data-price="${price}" data-name="${escapeHtml(p.name)}">
+    <article class="painting-card" data-id="${p.id}">
       <div class="card-viewer">
         <model-viewer src="${p.modelUrl}"
           alt="3D model of the painting '${escapeHtml(p.name)}'"
@@ -117,29 +144,37 @@ function cardTemplate(p) {
 }
 
 async function renderGallery() {
-  const paintings = await fetchPaintings();
-  els.empty.hidden = paintings.length > 0;
-  els.grid.innerHTML = paintings.map(cardTemplate).join('');
+  allPaintings = await fetchPaintings();
+  els.empty.hidden = allPaintings.length > 0;
+  els.grid.innerHTML = allPaintings.map(cardTemplate).join('');
 }
 
-/* Delegated click on the gallery — Add to Cart */
+/* ---- Click delegation ----
+   - Add to cart button  → quick add (no variant)
+   - AR launch button    → let model-viewer handle it
+   - Anywhere else       → open the product modal
+------------------------------------------------- */
 els.grid.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-action="add-cart"]');
-  if (!btn) return;
-  const card  = btn.closest('.painting-card');
-  const id    = card.dataset.id;
-  const name  = card.dataset.name;
-  const price = Number(card.dataset.price);
-
-  if (cart.has(id)) {
-    openDrawer();
+  // 1) quick add to cart
+  const addBtn = e.target.closest('[data-action="add-cart"]');
+  if (addBtn) {
+    e.stopPropagation();
+    const card = addBtn.closest('.painting-card');
+    const p = findPainting(card.dataset.id);
+    if (!p) return;
+    if (cart.has(p.id)) { openDrawer(); return; }
+    cart.add({ id: p.id, name: p.name, price: cart.priceFor(p.id) });
+    showToast(`Added "${p.name}" to your cart.`);
     return;
   }
-  cart.add({ id, name, price });
-  showToast(`Added "${name}" to your cart.`);
+  // 2) AR button — ignore
+  if (e.target.closest('.ar-launch')) return;
+  // 3) anywhere else on the card → open modal
+  const card = e.target.closest('.painting-card');
+  if (card) openProductModal(card.dataset.id);
 });
 
-/* Sync card button states whenever the cart changes */
+/* Sync card buttons whenever cart changes */
 function syncCardButtons(state) {
   const ids = new Set(state.items.map(i => i.id));
   els.grid.querySelectorAll('.painting-card').forEach(card => {
@@ -152,12 +187,106 @@ function syncCardButtons(state) {
 }
 
 /* =====================================================
+   PRODUCT MODAL
+===================================================== */
+let currentProductId = null;
+let selectedVariant  = null;
+
+function openProductModal(paintingId) {
+  const p = findPainting(paintingId);
+  if (!p) return;
+
+  currentProductId = p.id;
+  selectedVariant  = null;
+
+  // Viewer
+  els.productViewer.src = p.modelUrl;
+  els.productViewer.setAttribute('alt', `3D model of the painting '${p.name}'`);
+
+  // Title + price
+  els.productTitle.textContent = p.name;
+  els.productPrice.textContent = cart.formatPrice(cart.priceFor(p.id));
+
+  // Variants
+  const list = (p.variants || '')
+    .split(',').map(v => v.trim()).filter(Boolean);
+
+  if (list.length > 0) {
+    els.productVariants.innerHTML = list.map((v, i) => `
+      <button class="variant-pill ${i === 0 ? 'selected' : ''}"
+              type="button" data-variant="${escapeHtml(v)}">
+        ${escapeHtml(v)}
+      </button>
+    `).join('');
+    selectedVariant = list[0];
+    els.productVariantsSection.hidden = false;
+  } else {
+    els.productVariants.innerHTML = '';
+    els.productVariantsSection.hidden = true;
+  }
+
+  // Custom requests
+  els.productCustom.value = '';
+  els.productCustomSection.hidden = !p.allow_custom;
+
+  // Show
+  els.productModal.classList.add('open');
+  els.productModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('no-scroll');
+}
+
+function closeProductModal() {
+  els.productModal.classList.remove('open');
+  els.productModal.setAttribute('aria-hidden', 'true');
+  // Free model resources
+  els.productViewer.removeAttribute('src');
+  currentProductId = null;
+  selectedVariant = null;
+  maybeUnlockScroll();
+}
+
+els.productClose.addEventListener('click', closeProductModal);
+els.productOverlay.addEventListener('click', closeProductModal);
+
+/* Variant selection */
+els.productVariants.addEventListener('click', (e) => {
+  const btn = e.target.closest('.variant-pill');
+  if (!btn) return;
+  els.productVariants.querySelectorAll('.variant-pill')
+    .forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedVariant = btn.dataset.variant;
+});
+
+/* Add to cart from modal */
+els.productAdd.addEventListener('click', () => {
+  if (!currentProductId) return;
+  const p = findPainting(currentProductId);
+  if (!p) return;
+
+  const added = cart.add({
+    id:         p.id,
+    name:       p.name,
+    price:      cart.priceFor(p.id),
+    variant:    selectedVariant,
+    customNote: els.productCustom.value.trim()
+  });
+
+  if (added) {
+    const variantLabel = selectedVariant ? ` (${selectedVariant})` : '';
+    showToast(`Added "${p.name}${variantLabel}" to your cart.`);
+    closeProductModal();
+  } else {
+    showToast('This exact option is already in your cart.');
+  }
+});
+
+/* =====================================================
    CART DRAWER
 ===================================================== */
 function openDrawer() {
   els.cartDrawer.classList.add('open');
   els.cartOverlay.hidden = false;
-  // next tick so the transition runs
   requestAnimationFrame(() => els.cartOverlay.classList.add('show'));
   els.cartDrawer.setAttribute('aria-hidden', 'false');
   document.body.classList.add('no-scroll');
@@ -168,9 +297,7 @@ function closeDrawer() {
   els.cartOverlay.classList.remove('show');
   els.cartDrawer.setAttribute('aria-hidden', 'true');
   setTimeout(() => { els.cartOverlay.hidden = true; }, 300);
-  if (!els.checkoutModal.classList.contains('open')) {
-    document.body.classList.remove('no-scroll');
-  }
+  maybeUnlockScroll();
 }
 
 els.cartToggle.addEventListener('click', openDrawer);
@@ -179,18 +306,20 @@ els.cartOverlay.addEventListener('click', closeDrawer);
 
 function renderCartItems(state) {
   els.cartItems.innerHTML = state.items.map(item => `
-    <li class="cart-item" data-id="${item.id}">
+    <li class="cart-item" data-line="${item.lineId}">
       <div class="cart-item-thumb" aria-hidden="true">◈</div>
       <div class="cart-item-body">
         <span class="cart-item-name">${escapeHtml(item.name)}</span>
+        ${item.variant ? `<span class="cart-item-variant">${escapeHtml(item.variant)}</span>` : ''}
+        ${item.customNote ? `<span class="cart-item-note">"${escapeHtml(item.customNote)}"</span>` : ''}
         <span class="cart-item-price">${cart.formatPrice(item.price)}</span>
       </div>
       <button class="cart-item-remove" type="button"
-              data-remove="${item.id}" aria-label="Remove ${escapeHtml(item.name)}">×</button>
+              data-remove="${item.lineId}" aria-label="Remove ${escapeHtml(item.name)}">×</button>
     </li>
   `).join('');
 
-  els.cartEmpty.hidden = state.count > 0;
+  els.cartEmpty.hidden  = state.count > 0;
   els.cartFooter.hidden = state.count === 0;
   els.cartTotal.textContent = cart.formatPrice(state.total);
 }
@@ -199,10 +328,8 @@ els.cartItems.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-remove]');
   if (!btn) return;
   cart.remove(btn.dataset.remove);
-  renderBadge(cart.getState());
 });
 
-/* Update badge whenever cart changes */
 function renderBadge(state) {
   if (state.count > 0) {
     els.cartBadge.textContent = state.count;
@@ -219,19 +346,16 @@ cart.subscribe((state) => {
 });
 
 /* =====================================================
-   CHECKOUT MODAL
+   CHECKOUT MODAL  (unchanged from Phase 2)
 ===================================================== */
 function openCheckout() {
   const { total, count } = cart.getState();
   if (count === 0) return;
   els.checkoutTotal.textContent = cart.formatPrice(total);
-
-  // Always start at the form state, clean
-  els.stateForm.hidden = false;
+  els.stateForm.hidden    = false;
   els.stateSuccess.hidden = true;
   els.checkoutForm.reset();
   clearAllErrors();
-
   els.checkoutModal.classList.add('open');
   els.checkoutModal.setAttribute('aria-hidden', 'false');
   document.body.classList.add('no-scroll');
@@ -240,16 +364,13 @@ function openCheckout() {
 function closeCheckout() {
   els.checkoutModal.classList.remove('open');
   els.checkoutModal.setAttribute('aria-hidden', 'true');
-  if (!els.cartDrawer.classList.contains('open')) {
-    document.body.classList.remove('no-scroll');
-  }
+  maybeUnlockScroll();
 }
 
 els.cartCheckout.addEventListener('click', openCheckout);
 els.checkoutClose.addEventListener('click', closeCheckout);
 els.checkoutOverlay.addEventListener('click', closeCheckout);
 
-/* ---------- Input formatters ---------- */
 els.fldCard.addEventListener('input', (e) => {
   const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
   e.target.value = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
@@ -269,7 +390,6 @@ els.fldCvv.addEventListener('input', (e) => {
 
 els.fldName.addEventListener('input', () => clearError('name'));
 
-/* ---------- Validation ---------- */
 function validate() {
   const errors = {};
   const name = els.fldName.value.trim();
@@ -277,62 +397,52 @@ function validate() {
   const exp  = els.fldExpiry.value;
   const cvv  = els.fldCvv.value;
 
-  if (name.length < 3)  errors.name = 'Please enter your full name.';
+  if (name.length < 3) errors.name = 'Please enter your full name.';
   if (!/^\d{16}$/.test(card)) errors.card = 'Card number must be 16 digits.';
 
-  const expMatch = exp.match(/^(\d{2})\/(\d{2})$/);
-  if (!expMatch) {
-    errors.expiry = 'Use MM/YY format.';
-  } else {
-    const mm = parseInt(expMatch[1], 10);
-    const yy = parseInt(expMatch[2], 10);
+  const m = exp.match(/^(\d{2})\/(\d{2})$/);
+  if (!m) errors.expiry = 'Use MM/YY format.';
+  else {
+    const mm = parseInt(m[1], 10);
+    const yy = parseInt(m[2], 10);
     const now = new Date();
-    const currentYY = now.getFullYear() % 100;
-    const currentMM = now.getMonth() + 1;
+    const curYY = now.getFullYear() % 100;
+    const curMM = now.getMonth() + 1;
     if (mm < 1 || mm > 12) errors.expiry = 'Month must be 01–12.';
-    else if (yy < currentYY || (yy === currentYY && mm < currentMM)) {
-      errors.expiry = 'Card has expired.';
-    }
+    else if (yy < curYY || (yy === curYY && mm < curMM)) errors.expiry = 'Card has expired.';
   }
-
   if (!/^\d{3}$/.test(cvv)) errors.cvv = 'CVV must be 3 digits.';
-
   return errors;
 }
 
 function showError(key, message) {
-  const errorEl = document.querySelector(`[data-error="${key}"]`);
-  if (errorEl) errorEl.textContent = message;
-  const fieldId = { name:'fldName', card:'fldCard', expiry:'fldExpiry', cvv:'fldCvv' }[key];
-  document.getElementById(fieldId)?.closest('.field')?.classList.add('error');
+  const errEl = document.querySelector(`[data-error="${key}"]`);
+  if (errEl) errEl.textContent = message;
+  const fldId = { name:'fldName', card:'fldCard', expiry:'fldExpiry', cvv:'fldCvv' }[key];
+  document.getElementById(fldId)?.closest('.field')?.classList.add('error');
 }
 
 function clearError(key) {
-  const errorEl = document.querySelector(`[data-error="${key}"]`);
-  if (errorEl) errorEl.textContent = '';
-  const fieldId = { name:'fldName', card:'fldCard', expiry:'fldExpiry', cvv:'fldCvv' }[key];
-  document.getElementById(fieldId)?.closest('.field')?.classList.remove('error');
+  const errEl = document.querySelector(`[data-error="${key}"]`);
+  if (errEl) errEl.textContent = '';
+  const fldId = { name:'fldName', card:'fldCard', expiry:'fldExpiry', cvv:'fldCvv' }[key];
+  document.getElementById(fldId)?.closest('.field')?.classList.remove('error');
 }
 
 function clearAllErrors() {
   ['name','card','expiry','cvv'].forEach(clearError);
 }
 
-/* ---------- Submit ---------- */
 els.checkoutForm.addEventListener('submit', (e) => {
   e.preventDefault();
   clearAllErrors();
-
   const errors = validate();
   if (Object.keys(errors).length > 0) {
     Object.entries(errors).forEach(([k, v]) => showError(k, v));
     return;
   }
-
-  // ✅ Mock payment confirmed
-  cart.clear();  
-  renderBadge(cart.getState());                                // empties localStorage cart
-  els.stateForm.hidden = true;
+  cart.clear();
+  els.stateForm.hidden    = true;
   els.stateSuccess.hidden = false;
 });
 
@@ -341,10 +451,11 @@ els.checkoutDone.addEventListener('click', () => {
   closeDrawer();
 });
 
-/* ---------- Escape key closes overlays ---------- */
+/* ---------- Escape closes top-most overlay ---------- */
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (els.checkoutModal.classList.contains('open')) closeCheckout();
+  else if (els.productModal.classList.contains('open')) closeProductModal();
   else if (els.cartDrawer.classList.contains('open')) closeDrawer();
 });
 
