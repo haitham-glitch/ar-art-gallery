@@ -21,7 +21,17 @@
         <p class="brand-tagline">Augmented Reality Art Gallery</p>
       </div>
     </a>
-    <nav class="site-nav" id="siteNav"><!-- populated by JS --></nav>
+    <div class="header-actions">
+       <nav class="site-nav" id="siteNav"><!-- populated by JS --></nav>
+       <button class="cart-toggle" id="cartToggle" type="button" aria-label="Open cart">
+         <svg class="cart-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+           <path d="M6 7h12l-1.4 10.3a2 2 0 0 1-2 1.7H9.4a2 2 0 0 1-2-1.7L6 7z"/>
+           <path d="M9 7V5a3 3 0 0 1 6 0v2"/>
+          </svg>
+       <span class="cart-badge" id="cartBadge" hidden>0</span>
+       </button>
+    </div>
   </header>
 
   <main>
@@ -50,6 +60,127 @@
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+ <!-- ============== CART DRAWER ============== -->
+<div class="cart-overlay" id="cartOverlay" hidden></div>
+
+<aside class="cart-drawer" id="cartDrawer" aria-hidden="true" aria-labelledby="cart-title">
+  <header class="cart-header">
+    <div>
+      <p class="section-eyebrow">Selection</p>
+      <h2 class="cart-title" id="cart-title">Your <em>cart</em></h2>
+    </div>
+    <button class="icon-btn" id="cartClose" type="button" aria-label="Close cart">×</button>
+  </header>
+
+  <div class="cart-body">
+    <ul class="cart-items" id="cartItems" role="list"></ul>
+
+    <div class="cart-empty" id="cartEmpty">
+      <p class="empty-mark" aria-hidden="true">∅</p>
+      <p class="empty-text">Your cart is empty.<br>Add a painting to begin.</p>
+    </div>
+  </div>
+
+  <footer class="cart-footer" id="cartFooter" hidden>
+    <div class="cart-total-row">
+      <span class="cart-total-label">Total</span>
+      <span class="cart-total" id="cartTotal">$0</span>
+    </div>
+    <button class="submit-btn cart-checkout-btn" id="cartCheckout" type="button">
+      <span class="btn-label">Proceed to checkout</span>
+      <span class="btn-arrow" aria-hidden="true">→</span>
+    </button>
+  </footer>
+</aside>
+
+<!-- ============== CHECKOUT MODAL ============== -->
+<div class="checkout-modal" id="checkoutModal" aria-hidden="true">
+  <div class="checkout-overlay" id="checkoutOverlay"></div>
+  <div class="checkout-dialog" role="dialog" aria-labelledby="checkout-title">
+    <button class="icon-btn checkout-close" id="checkoutClose" type="button" aria-label="Close">×</button>
+
+    <!-- FORM STATE -->
+    <div class="checkout-state" data-state="form">
+      <header class="checkout-header">
+        <p class="section-eyebrow">Mock checkout</p>
+        <h2 class="checkout-title" id="checkout-title">Confirm <em>payment</em></h2>
+        <p class="checkout-sub">
+          This is a prototype — no real payment will be processed.
+        </p>
+      </header>
+
+      <form id="checkoutForm" class="checkout-form" novalidate>
+        <div class="checkout-summary">
+          <span class="checkout-summary-label">Order total</span>
+          <span class="checkout-summary-total" id="checkoutTotal">$0</span>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Full name</span>
+          <input type="text" id="fldName" autocomplete="cc-name" required />
+          <span class="field-error" data-error="name"></span>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Card number</span>
+          <input type="text" id="fldCard" inputmode="numeric"
+                 autocomplete="cc-number" maxlength="19"
+                 placeholder="1234 5678 9012 3456" required />
+          <span class="field-error" data-error="card"></span>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Expiry · MM/YY</span>
+            <input type="text" id="fldExpiry" inputmode="numeric"
+                   autocomplete="cc-exp" maxlength="5"
+                   placeholder="MM/YY" required />
+            <span class="field-error" data-error="expiry"></span>
+          </label>
+          <label class="field">
+            <span class="field-label">CVV</span>
+            <input type="text" id="fldCvv" inputmode="numeric"
+                   autocomplete="cc-csc" maxlength="3"
+                   placeholder="•••" required />
+            <span class="field-error" data-error="cvv"></span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="submit-btn">
+            <span class="btn-label">Confirm payment</span>
+            <span class="btn-arrow" aria-hidden="true">→</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- SUCCESS STATE -->
+    <div class="checkout-state" data-state="success" hidden>
+      <div class="checkout-success">
+        <div class="success-mark" aria-hidden="true">
+          <svg viewBox="0 0 52 52">
+            <circle cx="26" cy="26" r="24" fill="none"
+                    stroke="currentColor" stroke-width="2"/>
+            <path fill="none" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  d="M14 27 l8 8 l16 -18"/>
+          </svg>
+        </div>
+        <h2 class="checkout-title">Payment <em>confirmed</em></h2>
+        <p class="checkout-sub">
+          Your order has been placed (mock). A confirmation would normally be emailed to you.
+        </p>
+        <button class="submit-btn" id="checkoutDone" type="button">
+          <span class="btn-label">Back to gallery</span>
+          <span class="btn-arrow" aria-hidden="true">→</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
   <script type="module" src="js/index.js"></script>
 </body>
 </html>
