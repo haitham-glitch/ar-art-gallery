@@ -40,9 +40,8 @@
         <p class="section-eyebrow">Public Collection</p>
         <h2 class="section-title" id="gallery-title">Browse in your <em>space</em></h2>
         <p class="section-description">
-          Drag any model to inspect it from every angle. Tap
-          <em>View in your space</em> on a phone to launch AR and place the
-          painting on a real wall.
+          Tap any work to inspect it in 3D and launch
+          <em>View in your space</em> on a phone to place the painting on a real wall in AR.
         </p>
       </div>
 
@@ -102,11 +101,22 @@
 
     <div class="product-grid">
       <div class="product-viewer">
+        <!--
+          Heavy 3D viewer is dynamically loaded only when the modal opens
+          (see openProductModal in js/index.js). This prevents memory blow-up
+          when many cards are listed in the public gallery.
+
+          ar-placement="wall"  → AR anchors to a vertical surface (wall art)
+          ar-scale="fixed"     → disables pinch-zoom in AR so the model
+                                 renders at the exact scale we set programmatically
+                                 when the user picks a variant.
+        -->
         <model-viewer id="productViewer"
           ar ar-modes="webxr scene-viewer quick-look"
+          ar-placement="wall" ar-scale="fixed"
           camera-controls auto-rotate
           shadow-intensity="1.2" exposure="1.05"
-          environment-image="neutral" ar-scale="auto">
+          environment-image="neutral">
           <button slot="ar-button" class="ar-launch" type="button">
             <span>View in your space</span>
             <span class="ar-glyph">↗</span>
@@ -122,6 +132,9 @@
         <div class="product-section" id="productVariantsSection" hidden>
           <span class="field-label">Variant</span>
           <div class="variant-options" id="productVariants" role="radiogroup"></div>
+          <p class="variant-hint" id="productVariantHint" hidden>
+            Selected size scales the AR view to its real-world dimensions.
+          </p>
         </div>
 
         <div class="product-section" id="productCustomSection" hidden>
@@ -219,8 +232,8 @@
           </svg>
         </div>
         <h2 class="checkout-title">Payment <em>confirmed</em></h2>
-        <p class="checkout-sub">
-          Your order has been placed (mock). A confirmation would normally be emailed to you.
+        <p class="checkout-sub" id="checkoutSuccessSub">
+          Your order has been placed (mock). You can track its status from your profile.
         </p>
         <button class="submit-btn" id="checkoutDone" type="button">
           <span class="btn-label">Back to gallery</span>

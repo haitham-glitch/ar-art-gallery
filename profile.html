@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your profile · AR-Art-Gallery</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a href="index.html" class="brand brand-link">
+      <div class="brand-mark" aria-hidden="true">◈</div>
+      <div class="brand-text">
+        <h1 class="brand-name">AR-Art-Gallery</h1>
+        <p class="brand-tagline">Your account</p>
+      </div>
+    </a>
+    <div class="header-actions">
+      <nav class="site-nav">
+        <a href="index.html" class="nav-link">Public view</a>
+        <button class="nav-btn" id="logoutBtn" type="button">Sign out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============== ACCOUNT IDENTITY ============== -->
+    <section class="account-section" aria-labelledby="account-title">
+      <div class="section-header">
+        <p class="section-eyebrow">01 — Account</p>
+        <h2 class="section-title" id="account-title">Your <em>profile</em></h2>
+        <p class="section-description">
+          Your details and history of works you've acquired from the gallery.
+        </p>
+      </div>
+
+      <div class="account-card" id="accountCard">
+        <div class="account-avatar" id="accountAvatar" aria-hidden="true">·</div>
+        <div class="account-body">
+          <span class="account-name" id="accountName">—</span>
+          <span class="account-email" id="accountEmail">—</span>
+          <span class="account-role" id="accountRole" hidden>—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== ORDER HISTORY ============== -->
+    <section class="orders-section" aria-labelledby="orders-title">
+      <div class="section-header">
+        <p class="section-eyebrow">02 — History</p>
+        <h2 class="section-title" id="orders-title">Your <em>order history</em></h2>
+        <p class="section-description">
+          Every piece you've ordered, with its current status. Cards refresh on each visit.
+        </p>
+      </div>
+
+      <ul class="orders-list" id="ordersList" role="list"></ul>
+
+      <div id="ordersEmpty" class="empty-state" hidden>
+        <p class="empty-mark" aria-hidden="true">∅</p>
+        <p class="empty-text">
+          No orders yet. Head back to the
+          <a href="index.html" class="nav-link" style="text-decoration: underline;">gallery</a>
+          to acquire your first piece.
+        </p>
+      </div>
+
+      <div id="ordersLoading" class="empty-state">
+        <p class="empty-mark" aria-hidden="true">⋯</p>
+        <p class="empty-text">Loading your history…</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>AR-Art-Gallery · Your private order history is visible only to you.</p>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/profile.js"></script>
+</body>
+</html>

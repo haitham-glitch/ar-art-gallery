@@ -30,6 +30,7 @@ const els = {
   checkoutForm:    document.getElementById('checkoutForm'),
   checkoutDone:    document.getElementById('checkoutDone'),
   checkoutTotal:   document.getElementById('checkoutTotal'),
+  checkoutSuccessSub: document.getElementById('checkoutSuccessSub'),
   stateForm:       document.querySelector('[data-state="form"]'),
   stateSuccess:    document.querySelector('[data-state="success"]'),
   fldName:    document.getElementById('fldName'),
@@ -46,6 +47,7 @@ const els = {
   productPrice:    document.getElementById('productPrice'),
   productVariantsSection: document.getElementById('productVariantsSection'),
   productVariants: document.getElementById('productVariants'),
+  productVariantHint: document.getElementById('productVariantHint'),
   productCustomSection:   document.getElementById('productCustomSection'),
   productCustom:   document.getElementById('productCustom'),
   productAdd:      document.getElementById('productAdd'),
@@ -68,6 +70,111 @@ function maybeUnlockScroll() {
 }
 
 /* =====================================================
+   LIGHTWEIGHT EDITORIAL THUMBNAILS
+   -----------------------------------------------------
+   Instead of mounting a <model-viewer> per card (which
+   spins up a WebGL context per item and is what was
+   killing mobile), each card gets an inline SVG data-URI
+   <img> as a "gallery poster". Deterministic per id so
+   the same painting always wears the same colors.
+===================================================== */
+
+// Cheap stable hash from a string → unsigned int
+function hashOf(input) {
+  const s = String(input);
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// Curated palette pairs that match the cream / terracotta / ink system.
+// Each pair = [light gradient top, light gradient bottom, ink overlay tint].
+const THUMB_PALETTES = [
+  ['#ECE5D6', '#E0D4B8', '#B8654A'],
+  ['#EFE7D3', '#D9CCA8', '#9F5238'],
+  ['#E8E1D3', '#CFC2A0', '#7A4A36'],
+  ['#F0E6D0', '#DDC8A0', '#B25E45'],
+  ['#E5DEC9', '#C9B98F', '#8F4D34'],
+  ['#EADFC8', '#D3BC8E', '#A4583F'],
+  ['#EBE2CE', '#D6C09A', '#6F4434'],
+  ['#F1E9D6', '#E1CFA6', '#C2684D'],
+];
+
+function thumbnailFor(painting) {
+  const h        = hashOf(painting.id ?? painting.name ?? 'x');
+  const palette  = THUMB_PALETTES[h % THUMB_PALETTES.length];
+  const [top, bottom, accent] = palette;
+  const initial  = (String(painting.name || '◈').trim()[0] || '◈').toUpperCase();
+
+  // Subtle organic tilt + offset on the inner "frame" so no two cards
+  // sit at exactly the same angle (varies ± 1.4°)
+  const tilt     = (((h >>> 4) % 280) - 140) / 100;   // -1.4 … +1.4
+  const offsetX  = ((h >>> 12) % 14) - 7;             // -7 … +7
+  const offsetY  = ((h >>> 18) % 12) - 6;
+
+  // Pseudo-glyph in the corner — single mark stamped per painting,
+  // picked from a short curated set (no real characters, just glyphs).
+  const marks    = ['◈','◇','◆','◊','✦','✧','❖','✶'];
+  const mark     = marks[(h >>> 8) % marks.length];
+
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${escapeHtml(painting.name || 'Untitled work')}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${top}"/>
+      <stop offset="100%" stop-color="${bottom}"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="${accent}" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#1A1614" stop-opacity="0.07"/>
+    </linearGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 0"/>
+    </filter>
+  </defs>
+
+  <rect width="400" height="500" fill="url(#bg)"/>
+  <rect width="400" height="500" fill="#1A1614" filter="url(#grain)" opacity="0.18"/>
+
+  <!-- The painting "frame" — slightly tilted for an organic feel -->
+  <g transform="translate(${200 + offsetX} ${250 + offsetY}) rotate(${tilt})">
+    <rect x="-160" y="-200" width="320" height="400"
+          fill="url(#frame)"
+          stroke="#1A1614" stroke-opacity="0.18" stroke-width="1"/>
+    <rect x="-152" y="-192" width="304" height="384"
+          fill="none"
+          stroke="#1A1614" stroke-opacity="0.08" stroke-width="0.5"/>
+
+    <!-- Display initial — Fraunces falls back gracefully to Georgia inside SVG -->
+    <text x="0" y="38"
+          font-family="Fraunces, Georgia, 'Times New Roman', serif"
+          font-size="180" font-style="italic" font-weight="400"
+          text-anchor="middle"
+          fill="#1A1614" fill-opacity="0.78">${escapeHtml(initial)}</text>
+  </g>
+
+  <!-- Corner mark + format hint -->
+  <text x="24" y="36"
+        font-family="Manrope, system-ui, sans-serif"
+        font-size="11" font-weight="600"
+        letter-spacing="2"
+        fill="${accent}">${mark}</text>
+  <text x="376" y="476"
+        font-family="Manrope, system-ui, sans-serif"
+        font-size="9" font-weight="600"
+        letter-spacing="3"
+        text-anchor="end"
+        fill="#1A1614" fill-opacity="0.45">3D · AR READY</text>
+</svg>`.trim();
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/* =====================================================
    NAV
 ===================================================== */
 async function renderNav() {
@@ -77,12 +184,19 @@ async function renderNav() {
     return;
   }
   const profile = await getProfile(session.user.id);
-  const link = profile?.role === 'seller'
+  const isSeller = profile?.role === 'seller';
+
+  const primary = isSeller
     ? `<a href="dashboard.html" class="nav-link">Dashboard</a>`
-    : `<span class="nav-greeting">${escapeHtml(profile?.display_name || 'Welcome')}</span>`;
+    : `<a href="profile.html" class="nav-link">Your profile</a>`;
+
+  const greeting = profile?.display_name
+    ? `<span class="nav-greeting">${escapeHtml(profile.display_name)}</span>`
+    : '';
 
   els.nav.innerHTML = `
-    ${link}
+    ${greeting}
+    ${primary}
     <button class="nav-btn" id="logoutBtn" type="button">Sign out</button>
   `;
   document.getElementById('logoutBtn').addEventListener('click', async () => {
@@ -109,25 +223,25 @@ function findPainting(id) {
   return allPaintings.find(p => String(p.id) === String(id));
 }
 
+/* Lightweight 2D card — NO model-viewer here.
+   The heavy WebGL viewer is only mounted inside the product modal
+   when a user actually opens an item. */
 function cardTemplate(p) {
-  const price = cart.priceFor(p.id);
+  const price  = cart.priceFor(p.id);
   const inCart = cart.has(p.id);
+  const thumb  = thumbnailFor(p);
+
   return `
     <article class="painting-card" data-id="${p.id}">
-      <div class="card-viewer">
-        <model-viewer src="${p.modelUrl}"
-          alt="3D model of the painting '${escapeHtml(p.name)}'"
-          ar ar-modes="webxr scene-viewer quick-look"
-          camera-controls auto-rotate
-          shadow-intensity="1.2" exposure="1.05"
-          environment-image="neutral" ar-scale="auto"
-          loading="lazy">
-          <button slot="ar-button" class="ar-launch" type="button">
-            <span>View in your space</span>
-            <span class="ar-glyph">↗</span>
-          </button>
-        </model-viewer>
-      </div>
+      <button class="card-viewer card-viewer--thumb"
+              type="button" data-action="open-product"
+              aria-label="Open ${escapeHtml(p.name)} in 3D">
+        <img class="card-thumb" src="${thumb}" loading="lazy"
+             alt="Editorial preview of ${escapeHtml(p.name)}" />
+        <span class="card-3d-tag" aria-hidden="true">
+          <span class="ar-glyph">↗</span> View in 3D
+        </span>
+      </button>
       <div class="card-body">
         <div class="card-meta"><span>${formatDate(p.uploadedAt)}</span></div>
         <h3 class="card-title">${escapeHtml(p.name)}</h3>
@@ -150,9 +264,9 @@ async function renderGallery() {
 }
 
 /* ---- Click delegation ----
-   - Add to cart button  → quick add (no variant)
-   - AR launch button    → let model-viewer handle it
-   - Anywhere else       → open the product modal
+   - "Add to cart" button   → quick add (no variant)
+   - Anywhere else on card  → open the product modal (this is where
+                              the heavy 3D viewer is actually loaded)
 ------------------------------------------------- */
 els.grid.addEventListener('click', (e) => {
   // 1) quick add to cart
@@ -167,9 +281,7 @@ els.grid.addEventListener('click', (e) => {
     showToast(`Added "${p.name}" to your cart.`);
     return;
   }
-  // 2) AR button — ignore
-  if (e.target.closest('.ar-launch')) return;
-  // 3) anywhere else on the card → open modal
+  // 2) anywhere else on the card → open modal
   const card = e.target.closest('.painting-card');
   if (card) openProductModal(card.dataset.id);
 });
@@ -187,10 +299,52 @@ function syncCardButtons(state) {
 }
 
 /* =====================================================
-   PRODUCT MODAL
+   PRODUCT MODAL  +  DYNAMIC AR SCALING
+   -----------------------------------------------------
+   The product modal is the *only* place the heavy
+   <model-viewer> is alive. We attach `src` on open,
+   strip it on close → one WebGL context at a time.
 ===================================================== */
 let currentProductId = null;
 let selectedVariant  = null;
+let currentVariants  = [];   // array of variant strings for the active painting
+
+/**
+ * Map a chosen variant to a real-world scale factor.
+ * 1) keyword matching:  S / M / L  →  0.7 / 1.0 / 1.4
+ * 2) fallback: spread positions across [0.7, 1.4] so any custom
+ *    variant labels (e.g. "A2", "Studio", "Oversized") still get
+ *    a sensible relative size.
+ */
+function variantToScale(variant, variants = currentVariants) {
+  if (!variant) return '1 1 1';
+  const v = String(variant).trim().toLowerCase();
+
+  if (/(^|\W)(extra ?large|x ?large|xl|oversized|huge)(\W|$)/.test(v)) return '1.4 1.4 1.4';
+  if (/(^|\W)(large|big|l|lg)(\W|$)/.test(v))                          return '1.4 1.4 1.4';
+  if (/(^|\W)(medium|med|m|md|standard|regular)(\W|$)/.test(v))        return '1 1 1';
+  if (/(^|\W)(small|s|sm|mini|petite)(\W|$)/.test(v))                  return '0.7 0.7 0.7';
+
+  // Fallback: interpolate by position in the variant list.
+  const idx = variants.indexOf(variant);
+  const total = variants.length;
+  if (idx < 0 || total <= 1) return '1 1 1';
+  const t = idx / (total - 1);                  // 0 … 1
+  const f = (0.7 + t * 0.7).toFixed(2);          // 0.70 … 1.40
+  return `${f} ${f} ${f}`;
+}
+
+/**
+ * Apply the chosen variant's scale to the live <model-viewer>.
+ * Because the viewer has ar-scale="fixed", this exact scale
+ * is what users see in AR — no pinch-to-zoom override.
+ */
+function applyVariantScale(variant) {
+  const scale = variantToScale(variant);
+  els.productViewer.setAttribute('scale', scale);
+  // Also keep the JS property in sync for model-viewer's internal updates
+  try { els.productViewer.scale = scale; } catch { /* property may be read-only on some builds */ }
+}
 
 function openProductModal(paintingId) {
   const p = findPainting(paintingId);
@@ -198,10 +352,12 @@ function openProductModal(paintingId) {
 
   currentProductId = p.id;
   selectedVariant  = null;
+  currentVariants  = [];
 
-  // Viewer
-  els.productViewer.src = p.modelUrl;
+  // ---- Mount the heavy viewer ON DEMAND ----
+  els.productViewer.setAttribute('src', p.modelUrl);
   els.productViewer.setAttribute('alt', `3D model of the painting '${p.name}'`);
+  els.productViewer.setAttribute('scale', '1 1 1');  // reset
 
   // Title + price
   els.productTitle.textContent = p.name;
@@ -210,6 +366,7 @@ function openProductModal(paintingId) {
   // Variants
   const list = (p.variants || '')
     .split(',').map(v => v.trim()).filter(Boolean);
+  currentVariants = list;
 
   if (list.length > 0) {
     els.productVariants.innerHTML = list.map((v, i) => `
@@ -220,9 +377,14 @@ function openProductModal(paintingId) {
     `).join('');
     selectedVariant = list[0];
     els.productVariantsSection.hidden = false;
+    els.productVariantHint.hidden = false;
+
+    // Apply the initial variant's scale so AR launches at the right size
+    applyVariantScale(selectedVariant);
   } else {
     els.productVariants.innerHTML = '';
     els.productVariantsSection.hidden = true;
+    els.productVariantHint.hidden = true;
   }
 
   // Custom requests
@@ -238,17 +400,18 @@ function openProductModal(paintingId) {
 function closeProductModal() {
   els.productModal.classList.remove('open');
   els.productModal.setAttribute('aria-hidden', 'true');
-  // Free model resources
+  // Free model resources so we never keep a WebGL context idle
   els.productViewer.removeAttribute('src');
   currentProductId = null;
   selectedVariant = null;
+  currentVariants = [];
   maybeUnlockScroll();
 }
 
 els.productClose.addEventListener('click', closeProductModal);
 els.productOverlay.addEventListener('click', closeProductModal);
 
-/* Variant selection */
+/* Variant selection — also re-scales the live model */
 els.productVariants.addEventListener('click', (e) => {
   const btn = e.target.closest('.variant-pill');
   if (!btn) return;
@@ -256,6 +419,7 @@ els.productVariants.addEventListener('click', (e) => {
     .forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   selectedVariant = btn.dataset.variant;
+  applyVariantScale(selectedVariant);
 });
 
 /* Add to cart from modal */
@@ -346,7 +510,7 @@ cart.subscribe((state) => {
 });
 
 /* =====================================================
-   CHECKOUT MODAL  (unchanged from Phase 2)
+   CHECKOUT MODAL  +  SUPABASE ORDER PERSISTENCE
 ===================================================== */
 function openCheckout() {
   const { total, count } = cart.getState();
@@ -433,7 +597,38 @@ function clearAllErrors() {
   ['name','card','expiry','cvv'].forEach(clearError);
 }
 
-els.checkoutForm.addEventListener('submit', (e) => {
+/**
+ * Persist the order to Supabase. Called after mock-payment validation.
+ * Returns true if the order was actually saved against a signed-in user,
+ * false if it was completed as a guest (cart still clears, but no record).
+ */
+async function persistOrder() {
+  const { items, total } = cart.getState();
+  if (items.length === 0) return false;
+
+  const session = await getSession();
+  if (!session) return false;        // guest checkout — no row to insert
+
+  // Strip lineId before writing — it was only useful in-browser
+  const payload = items.map(({ id, name, price, variant, customNote }) => ({
+    id, name, price, variant, customNote
+  }));
+
+  const { error } = await supabase.from('orders').insert([{
+    user_id:      session.user.id,
+    items:        payload,
+    total_amount: total,
+    status:       'Processing'
+  }]);
+
+  if (error) {
+    console.error('Order insert failed:', error);
+    return false;
+  }
+  return true;
+}
+
+els.checkoutForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   clearAllErrors();
   const errors = validate();
@@ -441,6 +636,28 @@ els.checkoutForm.addEventListener('submit', (e) => {
     Object.entries(errors).forEach(([k, v]) => showError(k, v));
     return;
   }
+
+  const submitBtn = els.checkoutForm.querySelector('button[type="submit"]');
+  submitBtn?.classList.add('loading');
+  submitBtn && (submitBtn.disabled = true);
+
+  let saved = false;
+  try {
+    saved = await persistOrder();
+  } catch (err) {
+    console.error(err);
+  } finally {
+    submitBtn?.classList.remove('loading');
+    submitBtn && (submitBtn.disabled = false);
+  }
+
+  // Adapt the success copy to whether the order is trackable or not
+  if (els.checkoutSuccessSub) {
+    els.checkoutSuccessSub.textContent = saved
+      ? 'Your order has been placed (mock). You can track its status from your profile.'
+      : 'Your order has been placed (mock). Sign in next time to track orders from your profile.';
+  }
+
   cart.clear();
   els.stateForm.hidden    = true;
   els.stateSuccess.hidden = false;
