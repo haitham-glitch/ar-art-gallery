@@ -47,7 +47,6 @@ const els = {
   productPrice:    document.getElementById('productPrice'),
   productVariantsSection: document.getElementById('productVariantsSection'),
   productVariants: document.getElementById('productVariants'),
-  productVariantHint: document.getElementById('productVariantHint'),
   productCustomSection:   document.getElementById('productCustomSection'),
   productCustom:   document.getElementById('productCustom'),
   productAdd:      document.getElementById('productAdd'),
@@ -70,108 +69,174 @@ function maybeUnlockScroll() {
 }
 
 /* =====================================================
-   LIGHTWEIGHT EDITORIAL THUMBNAILS
+   THUMBNAIL CAPTURE QUEUE
    -----------------------------------------------------
-   Instead of mounting a <model-viewer> per card (which
-   spins up a WebGL context per item and is what was
-   killing mobile), each card gets an inline SVG data-URI
-   <img> as a "gallery poster". Deterministic per id so
-   the same painting always wears the same colors.
+   Real snapshots of each painting are rendered ONCE by
+   a single hidden <model-viewer> living off-screen.
+   Cards initially show a generic placeholder SVG; as
+   each capture completes, the corresponding <img> in
+   the grid swaps its src to the real blob URL.
+
+   One model is processed at a time — never N parallel
+   WebGL contexts. The hidden viewer's WebGL context is
+   reused for every painting in the queue.
 ===================================================== */
 
-// Cheap stable hash from a string → unsigned int
-function hashOf(input) {
-  const s = String(input);
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
+// Tiny shared placeholder (~600 bytes). Same for every card.
+const PLACEHOLDER_THUMB = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ECE5D6"/>
+      <stop offset="100%" stop-color="#E0D4B8"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="500" fill="url(#g)"/>
+  <text x="200" y="275" font-family="Fraunces,Georgia,serif" font-size="72"
+        font-style="italic" text-anchor="middle"
+        fill="#1A1614" fill-opacity="0.22">◈</text>
+</svg>`)}`;
+
+const SNAPSHOT_TIMEOUT_MS = 15000;   // hard timeout per model
+const QUEUE_BREATHER_MS   = 60;      // tiny gap between captures
+const thumbCache          = new Map(); // modelUrl  →  blob object URL
+const thumbQueue          = [];        // { modelUrl }[]
+let   thumbQueueRunning   = false;
+let   hiddenViewer        = null;
+
+/** Lazily create the single off-screen capture viewer. */
+function ensureHiddenViewer() {
+  if (hiddenViewer) return hiddenViewer;
+  hiddenViewer = document.createElement('model-viewer');
+  hiddenViewer.id = 'thumbCaptureViewer';
+  // No auto-rotate (we want a stable frame). Camera-controls keep the
+  // framing logic active so model-viewer auto-frames each new model.
+  hiddenViewer.setAttribute('camera-controls', '');
+  hiddenViewer.setAttribute('interaction-prompt', 'none');
+  hiddenViewer.setAttribute('disable-zoom', '');
+  hiddenViewer.setAttribute('disable-tap', '');
+  hiddenViewer.setAttribute('shadow-intensity', '1.2');
+  hiddenViewer.setAttribute('exposure', '1.05');
+  hiddenViewer.setAttribute('environment-image', 'neutral');
+  hiddenViewer.setAttribute('loading', 'eager');
+  hiddenViewer.setAttribute('reveal', 'auto');
+  hiddenViewer.setAttribute('aria-hidden', 'true');
+  // Styling is in index.html (#thumbCaptureViewer)
+  document.body.appendChild(hiddenViewer);
+  return hiddenViewer;
 }
 
-// Curated palette pairs that match the cream / terracotta / ink system.
-// Each pair = [light gradient top, light gradient bottom, ink overlay tint].
-const THUMB_PALETTES = [
-  ['#ECE5D6', '#E0D4B8', '#B8654A'],
-  ['#EFE7D3', '#D9CCA8', '#9F5238'],
-  ['#E8E1D3', '#CFC2A0', '#7A4A36'],
-  ['#F0E6D0', '#DDC8A0', '#B25E45'],
-  ['#E5DEC9', '#C9B98F', '#8F4D34'],
-  ['#EADFC8', '#D3BC8E', '#A4583F'],
-  ['#EBE2CE', '#D6C09A', '#6F4434'],
-  ['#F1E9D6', '#E1CFA6', '#C2684D'],
-];
+/**
+ * Load `modelUrl` into the hidden viewer, wait for the model to be ready,
+ * take a 2D snapshot, return a blob object-URL. Result is cached.
+ * Resolves to null on failure/timeout (caller leaves the placeholder in place).
+ */
+async function captureSnapshot(modelUrl) {
+  if (thumbCache.has(modelUrl)) return thumbCache.get(modelUrl);
 
-function thumbnailFor(painting) {
-  const h        = hashOf(painting.id ?? painting.name ?? 'x');
-  const palette  = THUMB_PALETTES[h % THUMB_PALETTES.length];
-  const [top, bottom, accent] = palette;
-  const initial  = (String(painting.name || '◈').trim()[0] || '◈').toUpperCase();
+  const viewer = ensureHiddenViewer();
 
-  // Subtle organic tilt + offset on the inner "frame" so no two cards
-  // sit at exactly the same angle (varies ± 1.4°)
-  const tilt     = (((h >>> 4) % 280) - 140) / 100;   // -1.4 … +1.4
-  const offsetX  = ((h >>> 12) % 14) - 7;             // -7 … +7
-  const offsetY  = ((h >>> 18) % 12) - 6;
+  // 1) wait for `load` (or `error`/timeout)
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      viewer.removeEventListener('load',  onLoad);
+      viewer.removeEventListener('error', onError);
+      clearTimeout(timer);
+      resolve();
+    };
+    const onLoad  = () => finish();
+    const onError = () => finish();
+    const timer   = setTimeout(finish, SNAPSHOT_TIMEOUT_MS);
 
-  // Pseudo-glyph in the corner — single mark stamped per painting,
-  // picked from a short curated set (no real characters, just glyphs).
-  const marks    = ['◈','◇','◆','◊','✦','✧','❖','✶'];
-  const mark     = marks[(h >>> 8) % marks.length];
+    viewer.addEventListener('load',  onLoad,  { once: true });
+    viewer.addEventListener('error', onError, { once: true });
 
-  const svg = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice" role="img" aria-label="${escapeHtml(painting.name || 'Untitled work')}">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${top}"/>
-      <stop offset="100%" stop-color="${bottom}"/>
-    </linearGradient>
-    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="${accent}" stop-opacity="0.10"/>
-      <stop offset="100%" stop-color="#1A1614" stop-opacity="0.07"/>
-    </linearGradient>
-    <filter id="grain">
-      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>
-      <feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 0"/>
-    </filter>
-  </defs>
+    // Trigger the load
+    viewer.setAttribute('src', modelUrl);
+  });
 
-  <rect width="400" height="500" fill="url(#bg)"/>
-  <rect width="400" height="500" fill="#1A1614" filter="url(#grain)" opacity="0.18"/>
+  // 2) give the renderer two frames to actually paint the first frame
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  <!-- The painting "frame" — slightly tilted for an organic feel -->
-  <g transform="translate(${200 + offsetX} ${250 + offsetY}) rotate(${tilt})">
-    <rect x="-160" y="-200" width="320" height="400"
-          fill="url(#frame)"
-          stroke="#1A1614" stroke-opacity="0.18" stroke-width="1"/>
-    <rect x="-152" y="-192" width="304" height="384"
-          fill="none"
-          stroke="#1A1614" stroke-opacity="0.08" stroke-width="0.5"/>
+  // 3) snapshot
+  try {
+    const blob = await viewer.toBlob({ idealAspect: false, mimeType: 'image/png' });
+    if (!blob) return null;
+    const url = URL.createObjectURL(blob);
+    thumbCache.set(modelUrl, url);
+    return url;
+  } catch (err) {
+    console.warn('toBlob failed for', modelUrl, err);
+    return null;
+  }
+}
 
-    <!-- Display initial — Fraunces falls back gracefully to Georgia inside SVG -->
-    <text x="0" y="38"
-          font-family="Fraunces, Georgia, 'Times New Roman', serif"
-          font-size="180" font-style="italic" font-weight="400"
-          text-anchor="middle"
-          fill="#1A1614" fill-opacity="0.78">${escapeHtml(initial)}</text>
-  </g>
+/** Apply a captured URL to every gallery <img> that points at this model. */
+function applyThumbToGrid(modelUrl, url) {
+  if (!url) return;
+  els.grid.querySelectorAll('.card-thumb').forEach(img => {
+    if (img.dataset.modelUrl !== modelUrl) return;
+    img.src = url;
+    img.classList.remove('is-loading');
+    img.classList.add('is-loaded');
+  });
+}
 
-  <!-- Corner mark + format hint -->
-  <text x="24" y="36"
-        font-family="Manrope, system-ui, sans-serif"
-        font-size="11" font-weight="600"
-        letter-spacing="2"
-        fill="${accent}">${mark}</text>
-  <text x="376" y="476"
-        font-family="Manrope, system-ui, sans-serif"
-        font-size="9" font-weight="600"
-        letter-spacing="3"
-        text-anchor="end"
-        fill="#1A1614" fill-opacity="0.45">3D · AR READY</text>
-</svg>`.trim();
+/** Mark every gallery <img> for this model as failed (keeps placeholder visible). */
+function markThumbFailed(modelUrl) {
+  els.grid.querySelectorAll('.card-thumb').forEach(img => {
+    if (img.dataset.modelUrl !== modelUrl) return;
+    img.classList.remove('is-loading');
+    img.classList.add('is-error');
+  });
+}
 
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+/** Add a model to the capture queue (dedup by modelUrl). */
+function enqueueThumb(modelUrl) {
+  if (!modelUrl) return;
+  if (thumbCache.has(modelUrl)) {
+    applyThumbToGrid(modelUrl, thumbCache.get(modelUrl));
+    return;
+  }
+  if (thumbQueue.some(t => t.modelUrl === modelUrl)) return;  // already queued
+  thumbQueue.push({ modelUrl });
+  if (!thumbQueueRunning) runThumbQueue();
+}
+
+async function runThumbQueue() {
+  thumbQueueRunning = true;
+  while (thumbQueue.length > 0) {
+    const { modelUrl } = thumbQueue.shift();
+
+    // Skip if no card still needs this thumb (gallery may have re-rendered)
+    const stillNeeded = !!els.grid.querySelector(
+      `.card-thumb.is-loading[data-model-url="${cssAttrEscape(modelUrl)}"]`
+    );
+    if (!stillNeeded && !thumbCache.has(modelUrl)) {
+      // queue moves on even if no card needs it right now — harmless
+    }
+
+    try {
+      const url = await captureSnapshot(modelUrl);
+      if (url) applyThumbToGrid(modelUrl, url);
+      else     markThumbFailed(modelUrl);
+    } catch (err) {
+      console.warn('Snapshot pipeline error:', err);
+      markThumbFailed(modelUrl);
+    }
+
+    // Let the main thread breathe between captures
+    await new Promise(r => setTimeout(r, QUEUE_BREATHER_MS));
+  }
+  thumbQueueRunning = false;
+}
+
+/** Minimal CSS attribute-selector escape (handles quotes/backslashes). */
+function cssAttrEscape(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 /* =====================================================
@@ -224,20 +289,22 @@ function findPainting(id) {
 }
 
 /* Lightweight 2D card — NO model-viewer here.
-   The heavy WebGL viewer is only mounted inside the product modal
-   when a user actually opens an item. */
+   The <img> starts on a shared placeholder and gets swapped to a real
+   snapshot when the capture queue gets to this painting. */
 function cardTemplate(p) {
   const price  = cart.priceFor(p.id);
   const inCart = cart.has(p.id);
-  const thumb  = thumbnailFor(p);
 
   return `
     <article class="painting-card" data-id="${p.id}">
       <button class="card-viewer card-viewer--thumb"
               type="button" data-action="open-product"
               aria-label="Open ${escapeHtml(p.name)} in 3D">
-        <img class="card-thumb" src="${thumb}" loading="lazy"
-             alt="Editorial preview of ${escapeHtml(p.name)}" />
+        <img class="card-thumb is-loading"
+             src="${PLACEHOLDER_THUMB}"
+             data-model-url="${escapeHtml(p.modelUrl)}"
+             loading="lazy"
+             alt="Preview of ${escapeHtml(p.name)}" />
         <span class="card-3d-tag" aria-hidden="true">
           <span class="ar-glyph">↗</span> View in 3D
         </span>
@@ -261,6 +328,12 @@ async function renderGallery() {
   allPaintings = await fetchPaintings();
   els.empty.hidden = allPaintings.length > 0;
   els.grid.innerHTML = allPaintings.map(cardTemplate).join('');
+
+  // Hand each model off to the snapshot queue in display order. Already-
+  // cached thumbs are applied immediately by enqueueThumb itself.
+  for (const p of allPaintings) {
+    enqueueThumb(p.modelUrl);
+  }
 }
 
 /* ---- Click delegation ----
@@ -299,52 +372,25 @@ function syncCardButtons(state) {
 }
 
 /* =====================================================
-   PRODUCT MODAL  +  DYNAMIC AR SCALING
+   PRODUCT MODAL
    -----------------------------------------------------
    The product modal is the *only* place the heavy
-   <model-viewer> is alive. We attach `src` on open,
-   strip it on close → one WebGL context at a time.
+   <model-viewer> is alive for user interaction.
+   We attach `src` on open, strip it on close → one
+   active WebGL context for the gallery experience
+   (the hidden capture viewer is a second one,
+   reused sequentially, never parallel).
+
+   Variants are presented as selectable pills only —
+   they record the user's chosen size in the cart and
+   in the eventual order row. AR uses ar-scale="auto"
+   so the user can resize the model with native pinch
+   gestures; the exact size lives in the variant label
+   (in cm) and is reinforced by the disclaimer text
+   in the markup.
 ===================================================== */
 let currentProductId = null;
 let selectedVariant  = null;
-let currentVariants  = [];   // array of variant strings for the active painting
-
-/**
- * Map a chosen variant to a real-world scale factor.
- * 1) keyword matching:  S / M / L  →  0.7 / 1.0 / 1.4
- * 2) fallback: spread positions across [0.7, 1.4] so any custom
- *    variant labels (e.g. "A2", "Studio", "Oversized") still get
- *    a sensible relative size.
- */
-function variantToScale(variant, variants = currentVariants) {
-  if (!variant) return '1 1 1';
-  const v = String(variant).trim().toLowerCase();
-
-  if (/(^|\W)(extra ?large|x ?large|xl|oversized|huge)(\W|$)/.test(v)) return '1.4 1.4 1.4';
-  if (/(^|\W)(large|big|l|lg)(\W|$)/.test(v))                          return '1.4 1.4 1.4';
-  if (/(^|\W)(medium|med|m|md|standard|regular)(\W|$)/.test(v))        return '1 1 1';
-  if (/(^|\W)(small|s|sm|mini|petite)(\W|$)/.test(v))                  return '0.7 0.7 0.7';
-
-  // Fallback: interpolate by position in the variant list.
-  const idx = variants.indexOf(variant);
-  const total = variants.length;
-  if (idx < 0 || total <= 1) return '1 1 1';
-  const t = idx / (total - 1);                  // 0 … 1
-  const f = (0.7 + t * 0.7).toFixed(2);          // 0.70 … 1.40
-  return `${f} ${f} ${f}`;
-}
-
-/**
- * Apply the chosen variant's scale to the live <model-viewer>.
- * Because the viewer has ar-scale="fixed", this exact scale
- * is what users see in AR — no pinch-to-zoom override.
- */
-function applyVariantScale(variant) {
-  const scale = variantToScale(variant);
-  els.productViewer.setAttribute('scale', scale);
-  // Also keep the JS property in sync for model-viewer's internal updates
-  try { els.productViewer.scale = scale; } catch { /* property may be read-only on some builds */ }
-}
 
 function openProductModal(paintingId) {
   const p = findPainting(paintingId);
@@ -352,12 +398,10 @@ function openProductModal(paintingId) {
 
   currentProductId = p.id;
   selectedVariant  = null;
-  currentVariants  = [];
 
   // ---- Mount the heavy viewer ON DEMAND ----
   els.productViewer.setAttribute('src', p.modelUrl);
   els.productViewer.setAttribute('alt', `3D model of the painting '${p.name}'`);
-  els.productViewer.setAttribute('scale', '1 1 1');  // reset
 
   // Title + price
   els.productTitle.textContent = p.name;
@@ -366,7 +410,6 @@ function openProductModal(paintingId) {
   // Variants
   const list = (p.variants || '')
     .split(',').map(v => v.trim()).filter(Boolean);
-  currentVariants = list;
 
   if (list.length > 0) {
     els.productVariants.innerHTML = list.map((v, i) => `
@@ -377,14 +420,9 @@ function openProductModal(paintingId) {
     `).join('');
     selectedVariant = list[0];
     els.productVariantsSection.hidden = false;
-    els.productVariantHint.hidden = false;
-
-    // Apply the initial variant's scale so AR launches at the right size
-    applyVariantScale(selectedVariant);
   } else {
     els.productVariants.innerHTML = '';
     els.productVariantsSection.hidden = true;
-    els.productVariantHint.hidden = true;
   }
 
   // Custom requests
@@ -400,18 +438,19 @@ function openProductModal(paintingId) {
 function closeProductModal() {
   els.productModal.classList.remove('open');
   els.productModal.setAttribute('aria-hidden', 'true');
-  // Free model resources so we never keep a WebGL context idle
+  // Free model resources so we never keep an idle WebGL context
   els.productViewer.removeAttribute('src');
   currentProductId = null;
   selectedVariant = null;
-  currentVariants = [];
   maybeUnlockScroll();
 }
 
 els.productClose.addEventListener('click', closeProductModal);
 els.productOverlay.addEventListener('click', closeProductModal);
 
-/* Variant selection — also re-scales the live model */
+/* Variant selection — pills are pure UI state now.
+   The AR preview is NOT scaled; the cm value in the variant label
+   is what tells the buyer the real-world size. */
 els.productVariants.addEventListener('click', (e) => {
   const btn = e.target.closest('.variant-pill');
   if (!btn) return;
@@ -419,7 +458,6 @@ els.productVariants.addEventListener('click', (e) => {
     .forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
   selectedVariant = btn.dataset.variant;
-  applyVariantScale(selectedVariant);
 });
 
 /* Add to cart from modal */

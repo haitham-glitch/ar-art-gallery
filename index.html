@@ -11,6 +11,34 @@
 
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
+
+  <!--
+    Phase 5 — small inline rules for the new thumbnail loading state.
+    Kept inline so styles.css doesn't need to change for this refinement.
+  -->
+  <style>
+    .card-thumb { opacity: 1; transition: opacity 0.55s ease; }
+    .card-thumb.is-loading { animation: thumbPulse 1.6s ease-in-out infinite; }
+    .card-thumb.is-loaded  { animation: none; }
+    .card-thumb.is-error   { animation: none; opacity: 0.75; }
+    @keyframes thumbPulse {
+      0%, 100% { opacity: 0.70; }
+      50%      { opacity: 0.95; }
+    }
+    /* Off-screen capture viewer — present in the DOM (so WebGL actually
+       renders) but invisible and non-interactive. Created lazily from JS. */
+    #thumbCaptureViewer {
+      position: fixed;
+      left: -10000px;
+      top: 0;
+      width: 600px;
+      height: 600px;
+      pointer-events: none;
+      z-index: -1;
+      background: linear-gradient(180deg, #ECE5D6 0%, #E0D4B8 100%);
+      --poster-color: transparent;
+    }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -102,18 +130,18 @@
     <div class="product-grid">
       <div class="product-viewer">
         <!--
-          Heavy 3D viewer is dynamically loaded only when the modal opens
-          (see openProductModal in js/index.js). This prevents memory blow-up
-          when many cards are listed in the public gallery.
+          The heavy 3D viewer is mounted ON-DEMAND when the modal opens
+          (see openProductModal in js/index.js). One WebGL context at a time.
 
-          ar-placement="wall"  → AR anchors to a vertical surface (wall art)
-          ar-scale="fixed"     → disables pinch-zoom in AR so the model
-                                 renders at the exact scale we set programmatically
-                                 when the user picks a variant.
+          ar-placement="wall" → AR anchors to a vertical surface (wall art)
+          ar-scale="auto"     → native AR scaling restored. Users can resize
+                                the model in AR; the exact real-world size
+                                is communicated via the variant labels (in cm)
+                                and the disclaimer in the product info column.
         -->
         <model-viewer id="productViewer"
           ar ar-modes="webxr scene-viewer quick-look"
-          ar-placement="wall" ar-scale="fixed"
+          ar-placement="wall" ar-scale="auto"
           camera-controls auto-rotate
           shadow-intensity="1.2" exposure="1.05"
           environment-image="neutral">
@@ -129,19 +157,18 @@
         <h2 class="product-title" id="product-title"></h2>
         <p class="product-price" id="productPrice"></p>
 
+        <p class="ar-size-warning" style="font-size: 11px; color: var(--ink-muted); font-style: italic; margin-top: 8px;">Note: The AR preview size is approximate. Please refer to the exact dimensions selected below.</p>
+
         <div class="product-section" id="productVariantsSection" hidden>
           <span class="field-label">Variant</span>
           <div class="variant-options" id="productVariants" role="radiogroup"></div>
-          <p class="variant-hint" id="productVariantHint" hidden>
-            Selected size scales the AR view to its real-world dimensions.
-          </p>
         </div>
 
         <div class="product-section" id="productCustomSection" hidden>
           <label class="field">
-            <span class="field-label">Any specific requests?</span>
+            <span class="field-label">Request a Custom Size (cm)</span>
             <textarea id="productCustom" rows="3"
-                      placeholder="e.g. Custom dimensions, color adjustments, framing preferences..."></textarea>
+                      placeholder="e.g. 45x45 cm"></textarea>
           </label>
         </div>
 
